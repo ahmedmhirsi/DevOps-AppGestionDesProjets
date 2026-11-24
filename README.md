@@ -1,13 +1,7 @@
 # DevOps-AppGestionDesProjets
 
 Ce dépôt contient un projet **Spring Boot** (backend) et **Angular** (frontend) utilisé dans le cadre du module **DevOps**.  
-Il sert de support pratique pour mettre en œuvre un pipeline Jenkins basé sur l'intégration continue (CI) et la livraison continue (CD).
-
-L'objectif principal est de permettre aux étudiants de :
-- Configurer un pipeline **SCM** (Source Code Management) avec Jenkins
-- Automatiser le **build** du projet (Maven + npm)
-- Exécuter des **tests unitaires** (si disponibles)
-- Générer un **livrable** déployable
+Il sert de support pratique pour mettre en œuvre un pipeline Jenkins basé sur l'intégration continue (CI), la livraison continue (Continuous Delivery) et le déploiement continu (Continuous Deployment).
 
 ---
 
@@ -15,22 +9,19 @@ L'objectif principal est de permettre aux étudiants de :
 
 ```
 DevOps-AppGestionDesProjets/
-├── backend/          # API REST Spring Boot (Java 17, Maven)
+├── backend/          # API REST Spring Boot (Java 17/21, Maven)
 │   ├── src/
 │   │   └── main/java/tn/esprit/backend/
 │   │       ├── entity/
-│   │       ��── repository/
+│   │       ├── repository/
 │   │       ├── service/
 │   │       └── controller/
+│   ├── mvnw          # Maven Wrapper exécutable
 │   └── pom.xml
 ├── frontend/         # Application Angular 22 (Node.js, npm)
 │   ├── src/
-│   │   └── app/
-│   │       ��── models/
-│   │       ├── services/
-│   │       ├── components/
-│   │       └── pages/
 │   └── package.json
+├── Jenkinsfile       # Pipeline Déclaratif Jenkins CI/CD complet
 └── README.md
 ```
 
@@ -49,181 +40,117 @@ Le projet simule une application de gestion de projets pour une organisation com
 
 ---
 
-## ⚙️ Prérequis
+## 🔌 Endpoints REST du Backend
 
-Avant de lancer le projet, vérifier que les outils suivants sont installés :
-
-| Outil | Version minimale | Vérification |
-|---|---|---|
-| Java JDK | 17 | `java -version` |
-| Maven | 3.8+ | `mvn -version` |
-| Node.js | 18+ | `node -v` |
-| npm | 9+ | `npm -v` |
-| Angular CLI | 22+ | `ng version` |
-| MySQL | 8.0+ | `mysql --version` |
+| Contrôleur | Méthode | URL | Description |
+|---|---|---|---|
+| **Entreprise** | GET | `/entreprise/all` | Lister toutes les entreprises |
+| | GET | `/entreprise/get/{id}` | Obtenir une entreprise par ID |
+| | POST | `/entreprise/add` | Ajouter une entreprise |
+| | PUT | `/entreprise/update` | Modifier une entreprise |
+| | DELETE | `/entreprise/delete/{id}` | Supprimer une entreprise |
+| **Equipe** | GET | `/equipe/all` | Lister toutes les équipes |
+| | GET | `/equipe/get/{id}` | Obtenir une équipe par ID |
+| | POST | `/equipe/add` | Ajouter une équipe |
+| | PUT | `/equipe/update` | Modifier une équipe |
+| | DELETE | `/equipe/delete/{id}` | Supprimer une équipe |
+| | PUT | `/equipe/assign-entreprise/{equipeId}/{entrepriseId}` | Affecter une équipe à une entreprise |
+| | PUT | `/equipe/assign-projet/{equipeId}/{projetId}` | Affecter une équipe à un projet |
+| **Projet** | GET | `/projet/all` | Lister tous les projets |
+| | GET | `/projet/get/{id}` | Obtenir un projet par ID |
+| | POST | `/projet/add` | Ajouter un projet |
+| | PUT | `/projet/update` | Modifier un projet |
+| | DELETE | `/projet/delete/{id}` | Supprimer un projet |
+| **Projet Détaillé** | GET | `/projet-detaille/all` | Lister tous les projets détaillés |
+| | GET | `/projet-detaille/get/{id}` | Obtenir un projet détaillé par ID |
+| | POST | `/projet-detaille/add` | Ajouter un projet détaillé |
+| | PUT | `/projet-detaille/update` | Modifier un projet détaillé |
+| | DELETE | `/projet-detaille/delete/{id}` | Supprimer un projet détaillé |
 
 ---
 
-## 🗄️ Configuration de la base de données
+## 🚀 Pipeline CI/CD Jenkins & Déploiement Continu
 
-Le backend se connecte à une base de données **MySQL**.  
-Les paramètres de connexion se trouvent dans `backend/src/main/resources/application.properties` :
+Le projet implémente une chaîne CI/CD complète, sécurisée et automatisée dans `Jenkinsfile`.
 
-```properties
-spring.datasource.url=jdbc:mysql://localhost:3306/test_db?createDatabaseIfNotExist=true
-spring.datasource.username=root
-spring.datasource.password=root
-spring.jpa.hibernate.ddl-auto=update
+### 1. Cycle de vie des étapes Jenkins (Stage View)
+
+```
+[ Checkout ] ➔ [ Clean ] ➔ [ Test ] ➔ [ Package ] ➔ [ Archive Artifacts ] ➔ [ Deploy ]
 ```
 
-> La base de données `test_db` est créée automatiquement au premier démarrage.  
-> Modifier `username` et `password` selon votre configuration MySQL locale.
+1. **`Checkout`** : Récupère le code source de la branche `ci/jenkins-backend` via Git SCM.
+2. **`Clean`** : Nettoie l'espace de compilation (`./mvnw clean`) pour garantir l'idempotence du build.
+3. **`Test`** : Exécute les tests unitaires Spring Boot (`./mvnw test`) avec injection sécurisée des identifiants MySQL (`mysql-backend-db`) et publie les rapports JUnit (`junit 'backend/target/surefire-reports/*.xml'`).
+4. **`Package`** : Empaquète l'application en archive JAR exécutable (`./mvnw -DskipTests package`) sans réexécuter les tests une seconde fois.
+5. **`Archive Artifacts` (Continuous Delivery)** : Archive le binaire `backend/target/backend-1.0.0.jar` avec calcul de l'empreinte cryptographique MD5 (`fingerprint: true`). L'artefact est téléchargeable directement sur la page du build Jenkins.
+6. **`Deploy` (Continuous Deployment)** : Déploie automatiquement le binaire JAR en local dans WSL sur le **port 8082** avec remplacement propre de l'ancienne instance et vérification de disponibilité HTTP.
 
----
+### 2. Déclencheurs Automatiques (Triggers)
 
-## 🚀 Lancer le projet
+Le pipeline configure deux mécanismes de déclenchement complémentaires :
 
-### 1. Backend — Spring Boot
+* **Webhook GitHub (Événementiel)** : `githubPush()`  
+  Chaque `git push` sur la branche `ci/jenkins-backend` déclenche immédiatement et automatiquement le pipeline via le Webhook GitHub connecté au tunnel ngrok (`/github-webhook/`).
+* **Cron Planifié (Temporel)** : `cron('H 2 * * 1-5')`  
+  Exécute un build automatique de non-régression chaque nuit du lundi au vendredi entre 02h00 et 02h59 (heure locale WAT / UTC+1).
+
+### 3. Architecture des Ports et Sécurité du Déploiement
+
+* **Port 8080** : Réservé exclusivement à **Jenkins**.
+* **Port 8082** : Dédié au **Backend Spring Boot déployé**.  
+  *Justification :* Évite tout conflit de socket réseau avec Jenkins sur la même machine WSL.
+* **Port 3306** : Serveur de base de données **MySQL** (`test_db`).
+* **Secrets** : Aucun mot de passe ni identifiant n'est écrit dans le code, les logs ou l'historique shell. Les variables de connexion (`SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`) sont injectées au runtime via le gestionnaire de credentials Jenkins `mysql-backend-db`.
+
+### 4. Vérification du Backend Déployé
+
+Une fois le pipeline exécuté avec succès, vérifier l'état du backend sur le port **8082** :
 
 ```bash
-cd backend
+# Tester l'API (doit retourner HTTP 200 avec un tableau JSON [])
+curl -i http://localhost:8082/equipe/all
+curl -i http://localhost:8082/entreprise/all
+curl -i http://localhost:8082/projet/all
 
-# Compiler et lancer
-mvn spring-boot:run
+# Vérifier le port d'écoute 8082
+ss -tlnp | grep 8082
+
+# Consulter les logs d'exécution du backend
+tail -f /var/lib/jenkins/backend-deploy/backend-app.log
 ```
 
-Le backend démarre sur **http://localhost:8080**
+### 5. Gestion du Processus Déployé (Arrêt / Redémarrage Manuel)
 
-Pour vérifier : ouvrir `http://localhost:8080/entreprise/all` → doit retourner `[]`
-
-### 2. Frontend — Angular
-
-> Ouvrir un **second terminal** sans fermer celui du backend.
+Le processus backend est géré via son fichier PID stocké dans `/var/lib/jenkins/backend-deploy/backend.pid` :
 
 ```bash
-cd frontend
+# Arrêter proprement le backend déployé
+kill $(cat /var/lib/jenkins/backend-deploy/backend.pid)
 
-# Installer les dépendances (première fois uniquement)
-npm install
-
-# Lancer le serveur de développement
-ng serve -o
-```
-
-L'application s'ouvre automatiquement sur **http://localhost:4200**
-
----
-
-## 🔌 Endpoints REST disponibles
-
-### Entreprise — `/entreprise`
-| Méthode | URL | Description |
-|---|---|---|
-| GET | `/entreprise/all` | Lister toutes les entreprises |
-| GET | `/entreprise/get/{id}` | Obtenir une entreprise par ID |
-| POST | `/entreprise/add` | Ajouter une entreprise |
-| PUT | `/entreprise/update` | Modifier une entreprise |
-| DELETE | `/entreprise/delete/{id}` | Supprimer une entreprise |
-
-### Equipe — `/equipe`
-| Méthode | URL | Description |
-|---|---|---|
-| GET | `/equipe/all` | Lister toutes les équipes |
-| GET | `/equipe/get/{id}` | Obtenir une équipe par ID |
-| POST | `/equipe/add` | Ajouter une équipe |
-| PUT | `/equipe/update` | Modifier une équipe |
-| DELETE | `/equipe/delete/{id}` | Supprimer une équipe |
-| PUT | `/equipe/assign-entreprise/{equipeId}/{entrepriseId}` | Affecter une équipe à une entreprise |
-| PUT | `/equipe/assign-projet/{equipeId}/{projetId}` | Affecter une équipe à un projet |
-
-### Projet — `/projet`
-| Méthode | URL | Description |
-|---|---|---|
-| GET | `/projet/all` | Lister tous les projets |
-| GET | `/projet/get/{id}` | Obtenir un projet par ID |
-| POST | `/projet/add` | Ajouter un projet |
-| PUT | `/projet/update` | Modifier un projet |
-| DELETE | `/projet/delete/{id}` | Supprimer un projet |
-
-### Projet Détaillé — `/projet-detaille`
-| Méthode | URL | Description |
-|---|---|---|
-| GET | `/projet-detaille/all` | Lister tous les projets détaillés |
-| GET | `/projet-detaille/get/{id}` | Obtenir un projet d��taillé par ID |
-| POST | `/projet-detaille/add` | Ajouter un projet détaillé |
-| PUT | `/projet-detaille/update` | Modifier un projet détaillé |
-| DELETE | `/projet-detaille/delete/{id}` | Supprimer un projet détaillé |
-| PUT | `/projet-detaille/assign-projet/{pdId}/{projetId}` | Affecter à un projet |
-
----
-
-## 🔧 Intégration Jenkins (CI/CD)
-
-Ce projet est conçu pour être intégré dans un pipeline Jenkins. Un `Jenkinsfile` peut être ajouté à la racine du dépôt pour automatiser les étapes suivantes :
-
-```
-Checkout SCM → Build Backend (mvn) → Tests → Build Frontend (npm) → Archive Artifacts
-```
-
-Exemple de pipeline :
-
-```groovy
-pipeline {
-    agent any
-    stages {
-        stage('Checkout') {
-            steps { checkout scm }
-        }
-        stage('Build Backend') {
-            steps {
-                dir('backend') {
-                    sh 'mvn clean package -DskipTests'
-                }
-            }
-        }
-        stage('Test Backend') {
-            steps {
-                dir('backend') {
-                    sh 'mvn test'
-                }
-            }
-        }
-        stage('Build Frontend') {
-            steps {
-                dir('frontend') {
-                    sh 'npm install'
-                    sh 'npm run build'
-                }
-            }
-        }
-        stage('Archive') {
-            steps {
-                archiveArtifacts artifacts: 'backend/target/*.jar', fingerprint: true
-            }
-        }
-    }
-}
+# Redémarrer manuellement le backend déployé
+export SERVER_PORT=8082
+nohup java -Dserver.port=8082 -jar /var/lib/jenkins/backend-deploy/backend-1.0.0.jar > /var/lib/jenkins/backend-deploy/backend-app.log 2>&1 &
+echo $! > /var/lib/jenkins/backend-deploy/backend.pid
 ```
 
 ---
 
 ## 🛠️ Stack technique
 
-| Couche | Technologie |
-|---|---|
-| Backend | Spring Boot 4.1.0, Spring Data JPA, Spring Web MVC |
-| Base de données | MySQL 8.0 |
-| ORM | Hibernate |
-| Utilitaires | Lombok |
-| Frontend | Angular 22 (Standalone Components) |
-| HTTP Client | Angular HttpClient |
-| Build backend | Apache Maven |
-| Build frontend | npm / Angular CLI |
-| CI/CD | Jenkins |
-| Conteneurisation | Docker *(à venir)* |
+| Couche | Technologie | Port / Service |
+|---|---|---|
+| Backend | Spring Boot 4.1.0, Spring Data JPA, Hibernate | Port `8082` |
+| Base de données | MySQL 8.0 Server | Port `3306` (`test_db`) |
+| CI/CD Server | Jenkins 2.580.2 | Port `8080` |
+| Tunnel Webhook | ngrok v3 | HTTPS ➔ Localhost:8080 |
+| Java Runtime | OpenJDK 21 | Tool `JDK21` |
+| Build Tool | Maven Wrapper (`./mvnw`) | Maven 3.9+ |
+| SCM | Git / GitHub | Branche `ci/jenkins-backend` |
 
 ---
 
 ## 👤 Auteur
 
-**ESPRIT — UP ASI**  
+**Ahmed Mhirsi** — ESPRIT  
+DevOps Academic Project
